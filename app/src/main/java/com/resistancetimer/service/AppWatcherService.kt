@@ -29,10 +29,11 @@ class AppWatcherService : Service() {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private lateinit var db: AppDatabase
 
-    // Track the current foreground app and session start time
     private var currentForegroundPkg: String? = null
     private var sessionStartTime: Long = 0L
-    private var alertShownForPkg: String? = null   // avoid spamming the alert
+    private var alertShownForPkg: String? = null
+
+    private val sessionExtensions: MutableMap<String, Int> = mutableMapOf()
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -75,24 +76,21 @@ class AppWatcherService : Service() {
                 val foregroundPkg = getForegroundApp(usageStatsManager, now) ?: continue
                 val today = dateFormat.format(Date(now))
 
-                // Ignore our own app and system UI
                 if (foregroundPkg == packageName || foregroundPkg == "com.android.systemui") {
                     flushCurrentSession(now)
                     continue
                 }
 
-                // Check if this app is being tracked
                 val limit = db.appLimitDao().getLimit(foregroundPkg) ?: run {
                     flushCurrentSession(now)
                     continue
                 }
 
-                // Day rollover check
                 if (limit.lastResetDate != today) {
                     db.appLimitDao().resetDailyUsage(foregroundPkg, today)
+                    sessionExtensions.remove(foregroundPkg)
                 }
 
-                // New app came to foreground
                 if (currentForegroundPkg != foregroundPkg) {
                     flushCurrentSession(now)
                     currentForegroundPkg = foregroundPkg
@@ -101,12 +99,12 @@ class AppWatcherService : Service() {
                     Log.d(TAG, "Now watching: $foregroundPkg")
                 }
 
-                // Increment usage by 1 second
                 db.appLimitDao().addUsedSeconds(foregroundPkg, 1)
 
-                // Re-fetch to get fresh usedSeconds
                 val updated = db.appLimitDao().getLimit(foregroundPkg) ?: continue
-                val remaining = updated.dailyLimitSeconds - updated.usedSecondsToday
+                val remaining = updated.dailyLimitSeconds +
+                        updated.extraSecondsEarned -
+                        updated.usedSecondsToday
 
                 if (remaining <= 0 && alertShownForPkg != foregroundPkg) {
                     alertShownForPkg = foregroundPkg
@@ -124,9 +122,10 @@ class AppWatcherService : Service() {
         if (sessionStartTime == 0L) return
 
         val duration = (now - sessionStartTime) / 1000
-        if (duration < 2) return   // ignore micro-visits
+        if (duration < 2) return
 
         val limit = db.appLimitDao().getLimit(pkg)
+        val extensions = sessionExtensions.remove(pkg) ?: 0
         db.usageSessionDao().insert(
             UsageSession(
                 appPackageName = pkg,
@@ -134,7 +133,7 @@ class AppWatcherService : Service() {
                 startTimeMillis = sessionStartTime,
                 durationSeconds = duration,
                 initialTimerSeconds = limit?.dailyLimitSeconds ?: 0,
-                extensions = 0
+                extensions = extensions
             )
         )
 
@@ -165,19 +164,17 @@ class AppWatcherService : Service() {
     private fun handleExtend(pkg: String, extraSeconds: Int) {
         scope.launch {
             val limit = db.appLimitDao().getLimit(pkg) ?: return@launch
-            // Give them extra time by bumping the daily limit
             db.appLimitDao().upsert(
-                limit.copy(
-                    dailyLimitSeconds = limit.dailyLimitSeconds + extraSeconds
-                )
+                limit.copy(extraSecondsEarned = limit.extraSecondsEarned + extraSeconds)
             )
-            alertShownForPkg = null   // allow alert to fire again when new limit hit
+            if (pkg == currentForegroundPkg) {
+                sessionExtensions[pkg] = (sessionExtensions[pkg] ?: 0) + 1
+            }
+            alertShownForPkg = null
         }
     }
 
     private fun handleDone(pkg: String) {
-        // Nothing to do in the service — the alert activity handles navigation
-        // We just reset the alert guard so it can fire tomorrow
         alertShownForPkg = null
     }
 
@@ -187,7 +184,7 @@ class AppWatcherService : Service() {
 
     private fun getForegroundApp(manager: UsageStatsManager, now: Long): String? {
         val stats = manager.queryUsageStats(
-            UsageStatsManager.INTERVAL_DAILY,
+            UsageStatsManager.INTERVAL_BEST,
             now - 5000L,
             now
         )

@@ -15,5 +15,6 @@ data class AppLimit(
     val appLabel: String,
     val dailyLimitSeconds: Int,        // how much they allow themselves
     val usedSecondsToday: Int = 0,     // how much they've burned today
-    val lastResetDate: String = ""     // "yyyy-MM-dd" — used to detect day rollover
+    val lastResetDate: String = "",    // "yyyy-MM-dd" — used to detect day rollover
+    val extraSecondsEarned: Int = 0    // bonus time granted via "extend" — resets daily
 )

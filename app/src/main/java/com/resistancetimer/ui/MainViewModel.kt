@@ -10,8 +10,10 @@ import com.resistancetimer.data.AppLimit
 import com.resistancetimer.data.TrackedApp
 import com.resistancetimer.data.UsageSession
 import com.resistancetimer.service.AppWatcherService
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -49,20 +51,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun loadInstalledApps() {
-        val pm = getApplication<Application>().packageManager
-        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-        val apps = pm.queryIntentActivities(intent, PackageManager.MATCH_ALL)
-            .map { info ->
-                TrackedApp(
-                    packageName = info.activityInfo.packageName,
-                    label = info.loadLabel(pm).toString(),
-                    icon = info.loadIcon(pm)
-                )
+        viewModelScope.launch {
+            val apps = withContext(Dispatchers.IO) {
+                val pm = getApplication<Application>().packageManager
+                val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+                pm.queryIntentActivities(intent, PackageManager.MATCH_ALL)
+                    .map { info ->
+                        TrackedApp(
+                            packageName = info.activityInfo.packageName,
+                            label = info.loadLabel(pm).toString(),
+                            icon = info.loadIcon(pm)
+                        )
+                    }
+                    .distinctBy { it.packageName }
+                    .filter { it.packageName != getApplication<Application>().packageName }
+                    .sortedBy { it.label.lowercase() }
             }
-            .distinctBy { it.packageName }
-            .filter { it.packageName != getApplication<Application>().packageName }
-            .sortedBy { it.label.lowercase() }
-        _installedApps.value = apps
+            _installedApps.value = apps
+        }
     }
 
     /**

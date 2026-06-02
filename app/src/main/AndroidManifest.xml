@@ -55,7 +55,11 @@
         <service
             android:name=".service.AppWatcherService"
             android:foregroundServiceType="specialUse"
-            android:exported="false" />
+            android:exported="false">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Watches which app is in the foreground and shows a Resistance alert overlay when the user hits their self-set daily limit" />
+        </service>
 
         <!-- Restart service on boot -->
         <receiver

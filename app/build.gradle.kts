@@ -67,8 +67,5 @@ dependencies {
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2")
 
-    // For shareable image generation
-    implementation("androidx.compose.ui:ui-graphics")
-
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

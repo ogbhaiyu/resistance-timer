@@ -1,5 +1,7 @@
 package com.resistancetimer.ui.screens
 
+import android.graphics.drawable.Drawable
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -12,11 +14,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.graphics.drawable.toBitmap
 import com.resistancetimer.data.AppLimit
 import com.resistancetimer.data.TrackedApp
 import com.resistancetimer.ui.MainViewModel
@@ -72,10 +77,11 @@ fun HomeScreen(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
                 )
                 appLimits.forEach { limit ->
+                    val app = installedApps.find { it.packageName == limit.packageName }
                     ActiveLimitRow(
                         limit = limit,
+                        icon = app?.icon,
                         onEdit = {
-                            val app = installedApps.find { it.packageName == limit.packageName }
                             if (app != null) showLimitDialog = app
                         },
                         onRemove = { viewModel.removeAppLimit(limit.packageName) }
@@ -148,6 +154,7 @@ fun HomeScreen(
 @Composable
 private fun ActiveLimitRow(
     limit: AppLimit,
+    icon: Drawable?,
     onEdit: () -> Unit,
     onRemove: () -> Unit
 ) {
@@ -164,6 +171,7 @@ private fun ActiveLimitRow(
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                AppIcon(icon = icon, modifier = Modifier.padding(end = 12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(limit.appLabel, fontWeight = FontWeight.SemiBold)
                     Text(
@@ -195,6 +203,22 @@ private fun ActiveLimitRow(
     }
 }
 
+@Composable
+private fun AppIcon(icon: Drawable?, modifier: Modifier = Modifier) {
+    if (icon == null) {
+        Spacer(modifier = modifier.size(40.dp))
+        return
+    }
+    val bitmap = remember(icon) { icon.toBitmap().asImageBitmap() }
+    Image(
+        bitmap = bitmap,
+        contentDescription = null,
+        modifier = modifier
+            .size(40.dp)
+            .clip(RoundedCornerShape(8.dp))
+    )
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AppListRow(
@@ -219,6 +243,7 @@ private fun AppListRow(
                 .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            AppIcon(icon = app.icon, modifier = Modifier.padding(end = 12.dp))
             Text(
                 text = app.label,
                 style = MaterialTheme.typography.bodyLarge,
