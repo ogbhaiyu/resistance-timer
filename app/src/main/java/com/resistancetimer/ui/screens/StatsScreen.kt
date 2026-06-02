@@ -41,6 +41,7 @@ import com.resistancetimer.ui.theme.ResistanceRed
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlin.math.roundToInt
 
 @Composable
 fun StatsScreen(

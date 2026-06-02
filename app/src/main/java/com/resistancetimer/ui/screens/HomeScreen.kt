@@ -201,7 +201,8 @@ fun HomeScreen(
         }
     }
 
-    showLimitDialog?.let { target ->
+    val target = showLimitDialog
+    if (target != null) {
         val currentLimit = limitsByPackage[target.packageName]
         SetLimitDialog(
             appLabel = target.label,
@@ -772,3 +773,8 @@ private fun formatDuration(seconds: Int): String {
         else -> "<1m"
     }
 }
+
+private data class LimitDialogTarget(
+    val packageName: String,
+    val label: String
+)
