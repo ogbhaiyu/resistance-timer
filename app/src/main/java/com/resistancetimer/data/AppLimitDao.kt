@@ -24,6 +24,9 @@ interface AppLimitDao {
     @Query("UPDATE app_limits SET usedSecondsToday = 0, extraSecondsEarned = 0, lastResetDate = :date WHERE packageName = :packageName")
     suspend fun resetDailyUsage(packageName: String, date: String)
 
+    @Query("UPDATE app_limits SET usedSecondsToday = 0, extraSecondsEarned = 0, lastResetDate = :date WHERE lastResetDate != :date")
+    suspend fun resetStaleDailyUsage(date: String)
+
     @Query("SELECT * FROM app_limits WHERE packageName = :packageName")
     fun observeLimit(packageName: String): Flow<AppLimit?>
 }

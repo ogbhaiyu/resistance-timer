@@ -1,6 +1,7 @@
 package com.resistancetimer.service
 
 import android.app.Service
+import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
@@ -32,6 +33,9 @@ class AppWatcherService : Service() {
     private var currentForegroundPkg: String? = null
     private var sessionStartTime: Long = 0L
     private var alertShownForPkg: String? = null
+    private var lastAlertedPkg: String? = null
+    private var lastKnownForegroundPkg: String? = null
+    private var lastUsageEventTime: Long = 0L
 
     private val sessionExtensions: MutableMap<String, Int> = mutableMapOf()
 
@@ -40,8 +44,11 @@ class AppWatcherService : Service() {
     override fun onCreate() {
         super.onCreate()
         db = AppDatabase.getInstance(this)
-        startForegroundWithNotification()
-        startWatchLoop()
+        if (startForegroundWithNotification()) {
+            startWatchLoop()
+        } else {
+            stopSelf()
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -73,7 +80,12 @@ class AppWatcherService : Service() {
                 delay(1000L)
 
                 val now = System.currentTimeMillis()
-                val foregroundPkg = getForegroundApp(usageStatsManager, now) ?: continue
+                val foregroundPkg = getForegroundApp(usageStatsManager, now)
+                if (foregroundPkg == null) {
+                    flushCurrentSession(now)
+                    continue
+                }
+
                 val today = dateFormat.format(Date(now))
 
                 if (foregroundPkg == packageName || foregroundPkg == "com.android.systemui") {
@@ -81,15 +93,21 @@ class AppWatcherService : Service() {
                     continue
                 }
 
-                val limit = db.appLimitDao().getLimit(foregroundPkg)
+                var limit = db.appLimitDao().getLimit(foregroundPkg)
                 if (limit == null) {
                     flushCurrentSession(now)
+                    alertShownForPkg = null
                     continue
                 }
 
                 if (limit.lastResetDate != today) {
+                    if (currentForegroundPkg == foregroundPkg) {
+                        flushCurrentSession(now)
+                    }
                     db.appLimitDao().resetDailyUsage(foregroundPkg, today)
                     sessionExtensions.remove(foregroundPkg)
+                    alertShownForPkg = null
+                    limit = db.appLimitDao().getLimit(foregroundPkg) ?: continue
                 }
 
                 if (currentForegroundPkg != foregroundPkg) {
@@ -97,6 +115,7 @@ class AppWatcherService : Service() {
                     currentForegroundPkg = foregroundPkg
                     sessionStartTime = now
                     alertShownForPkg = null
+                    lastAlertedPkg = null
                     Log.d(TAG, "Now watching: $foregroundPkg")
                 }
 
@@ -109,7 +128,7 @@ class AppWatcherService : Service() {
 
                 if (remaining <= 0 && alertShownForPkg != foregroundPkg) {
                     alertShownForPkg = foregroundPkg
-                    showResistanceAlert(foregroundPkg, limit)
+                    showResistanceAlert(foregroundPkg, updated)
                 }
             }
         }
@@ -120,26 +139,31 @@ class AppWatcherService : Service() {
      */
     private suspend fun flushCurrentSession(now: Long) {
         val pkg = currentForegroundPkg ?: return
-        if (sessionStartTime == 0L) return
+        val startedAt = sessionStartTime
 
-        val duration = (now - sessionStartTime) / 1000
-        if (duration < 2) return
+        currentForegroundPkg = null
+        sessionStartTime = 0L
+
+        if (startedAt == 0L) {
+            sessionExtensions.remove(pkg)
+            return
+        }
+
+        val duration = (now - startedAt) / 1000
+        val extensions = sessionExtensions.remove(pkg) ?: 0
+        if (duration < MIN_SESSION_SECONDS) return
 
         val limit = db.appLimitDao().getLimit(pkg)
-        val extensions = sessionExtensions.remove(pkg) ?: 0
         db.usageSessionDao().insert(
             UsageSession(
                 appPackageName = pkg,
                 appLabel = limit?.appLabel ?: pkg,
-                startTimeMillis = sessionStartTime,
+                startTimeMillis = startedAt,
                 durationSeconds = duration,
                 initialTimerSeconds = limit?.dailyLimitSeconds ?: 0,
                 extensions = extensions
             )
         )
-
-        currentForegroundPkg = null
-        sessionStartTime = 0L
     }
 
     // -------------------------------------------------------------------------
@@ -147,6 +171,7 @@ class AppWatcherService : Service() {
     // -------------------------------------------------------------------------
 
     private fun showResistanceAlert(packageName: String, limit: AppLimit) {
+        lastAlertedPkg = packageName
         val intent = Intent(this, ResistanceAlertActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or
                     Intent.FLAG_ACTIVITY_SINGLE_TOP or
@@ -168,15 +193,23 @@ class AppWatcherService : Service() {
             db.appLimitDao().upsert(
                 limit.copy(extraSecondsEarned = limit.extraSecondsEarned + extraSeconds)
             )
-            if (pkg == currentForegroundPkg) {
+            if (pkg == currentForegroundPkg || pkg == lastAlertedPkg) {
                 sessionExtensions[pkg] = (sessionExtensions[pkg] ?: 0) + 1
             }
             alertShownForPkg = null
+            lastAlertedPkg = null
         }
     }
 
     private fun handleDone(pkg: String) {
-        alertShownForPkg = null
+        scope.launch {
+            if (currentForegroundPkg == pkg) {
+                flushCurrentSession(System.currentTimeMillis())
+            }
+            sessionExtensions.remove(pkg)
+            alertShownForPkg = null
+            lastAlertedPkg = null
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -184,15 +217,63 @@ class AppWatcherService : Service() {
     // -------------------------------------------------------------------------
 
     private fun getForegroundApp(manager: UsageStatsManager, now: Long): String? {
-        val stats = manager.queryUsageStats(
-            UsageStatsManager.INTERVAL_BEST,
-            now - 5000L,
-            now
-        )
-        return stats?.maxByOrNull { it.lastTimeUsed }?.packageName
+        val queryStart = if (lastUsageEventTime == 0L) {
+            now - INITIAL_EVENT_LOOKBACK_MS
+        } else {
+            lastUsageEventTime
+        }
+
+        val usageEvents = manager.queryEvents(queryStart, now)
+        val event = UsageEvents.Event()
+        var foregroundPkg = lastKnownForegroundPkg
+        var newestEventTime = lastUsageEventTime
+
+        while (usageEvents.hasNextEvent()) {
+            usageEvents.getNextEvent(event)
+            val eventPackage = event.packageName ?: continue
+
+            when (event.eventType) {
+                UsageEvents.Event.MOVE_TO_FOREGROUND,
+                UsageEvents.Event.ACTIVITY_RESUMED -> foregroundPkg = eventPackage
+
+                UsageEvents.Event.MOVE_TO_BACKGROUND,
+                UsageEvents.Event.ACTIVITY_PAUSED -> {
+                    if (foregroundPkg == eventPackage) {
+                        foregroundPkg = null
+                    }
+                }
+            }
+
+            if (event.timeStamp > newestEventTime) {
+                newestEventTime = event.timeStamp
+            }
+        }
+
+        if (newestEventTime > 0L) {
+            lastUsageEventTime = newestEventTime
+        } else {
+            lastUsageEventTime = now
+            foregroundPkg = getRecentUsageFallback(manager, now)
+        }
+
+        lastKnownForegroundPkg = foregroundPkg
+        return foregroundPkg
     }
 
-    private fun startForegroundWithNotification() {
+    private fun getRecentUsageFallback(manager: UsageStatsManager, now: Long): String? {
+        val stats = manager.queryUsageStats(
+            UsageStatsManager.INTERVAL_BEST,
+            now - RECENT_USAGE_FALLBACK_MS,
+            now
+        )
+
+        return stats
+            ?.maxByOrNull { it.lastTimeUsed }
+            ?.takeIf { now - it.lastTimeUsed <= RECENT_USAGE_FALLBACK_MS }
+            ?.packageName
+    }
+
+    private fun startForegroundWithNotification(): Boolean {
         val notification = NotificationCompat.Builder(this, ResistanceApp.TIMER_CHANNEL_ID)
             .setContentTitle("Resistance Timer Active")
             .setContentText("Watching your app usage in the background")
@@ -201,7 +282,13 @@ class AppWatcherService : Service() {
             .setSilent(true)
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .build()
-        startForeground(NOTIFICATION_ID, notification)
+        return try {
+            startForeground(NOTIFICATION_ID, notification)
+            true
+        } catch (e: Exception) {
+            Log.w(TAG, "Unable to start foreground notification", e)
+            false
+        }
     }
 
     override fun onDestroy() {
@@ -212,6 +299,9 @@ class AppWatcherService : Service() {
     companion object {
         private const val TAG = "AppWatcherService"
         private const val NOTIFICATION_ID = 1001
+        private const val INITIAL_EVENT_LOOKBACK_MS = 10_000L
+        private const val RECENT_USAGE_FALLBACK_MS = 15_000L
+        private const val MIN_SESSION_SECONDS = 2L
 
         const val ACTION_EXTEND = "com.resistancetimer.EXTEND"
         const val ACTION_DONE = "com.resistancetimer.DONE"

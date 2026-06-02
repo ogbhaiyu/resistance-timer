@@ -3,6 +3,8 @@ package com.resistancetimer.ui
 import android.app.Application
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.util.Log
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.resistancetimer.ResistanceApp
@@ -15,6 +17,10 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
+import java.time.DayOfWeek
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.temporal.TemporalAdjusters
 import java.util.*
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -33,19 +39,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // Sessions this week for stats
     val sessionsThisWeek: StateFlow<List<UsageSession>> = run {
-        val weekAgo = System.currentTimeMillis() - 7 * 24 * 60 * 60 * 1000L
-        sessionDao.getSessionsSince(weekAgo)
+        val weekStart = startOfWeekMillis()
+        sessionDao.getSessionsSince(weekStart)
             .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
     }
 
     val totalSecondsThisWeek: StateFlow<Long> = run {
-        val weekAgo = System.currentTimeMillis() - 7 * 24 * 60 * 60 * 1000L
-        sessionDao.getTotalSecondsSince(weekAgo)
+        val weekStart = startOfWeekMillis()
+        sessionDao.getTotalSecondsSince(weekStart)
             .map { it ?: 0L }
             .stateIn(viewModelScope, SharingStarted.Lazily, 0L)
     }
 
     init {
+        resetStaleLimits()
         loadInstalledApps()
         ensureServiceRunning()
     }
@@ -81,8 +88,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val existing = limitDao.getLimit(packageName) ?: return@launch
                 limitDao.delete(existing)
             } else {
-                val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-                    .format(Date())
+                val today = todayKey()
                 val existing = limitDao.getLimit(packageName)
                 limitDao.upsert(
                     AppLimit(
@@ -106,10 +112,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     suspend fun getImprovementPercent(): Int {
         val now = System.currentTimeMillis()
-        val cal = Calendar.getInstance()
-        cal.set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
-        cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0)
-        val thisWeekStart = cal.timeInMillis
+        val thisWeekStart = startOfWeekMillis()
         val lastWeekStart = thisWeekStart - 7 * 24 * 60 * 60 * 1000L
 
         val thisWeek = sessionDao.getTotalSecondsBetween(thisWeekStart, now) ?: 0L
@@ -120,6 +123,36 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun ensureServiceRunning() {
         val context = getApplication<Application>()
-        context.startForegroundService(Intent(context, AppWatcherService::class.java))
+        try {
+            ContextCompat.startForegroundService(
+                context,
+                Intent(context, AppWatcherService::class.java)
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "Unable to start watcher service", e)
+        }
+    }
+
+    private fun resetStaleLimits() {
+        viewModelScope.launch {
+            limitDao.resetStaleDailyUsage(todayKey())
+        }
+    }
+
+    private fun todayKey(): String {
+        return SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+    }
+
+    private fun startOfWeekMillis(): Long {
+        val zone = ZoneId.systemDefault()
+        return LocalDate.now(zone)
+            .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+            .atStartOfDay(zone)
+            .toInstant()
+            .toEpochMilli()
+    }
+
+    companion object {
+        private const val TAG = "MainViewModel"
     }
 }

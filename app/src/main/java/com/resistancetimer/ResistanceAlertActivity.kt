@@ -18,8 +18,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -167,9 +167,10 @@ fun MinuteDrum(
     val currentIndex = remember(minutes) {
         options.indexOfFirst { it >= minutes }.takeIf { it >= 0 } ?: (options.size - 1)
     }
+    val itemHeight = 72.dp
+    val itemHeightPx = with(LocalDensity.current) { itemHeight.toPx() }
 
     var dragAccumulator by remember { mutableFloatStateOf(0f) }
-    val itemHeightPx = 72f   // logical pixels per "slot"
 
     Box(
         modifier = modifier
@@ -209,7 +210,7 @@ fun MinuteDrum(
                 val scale = if (isCurrent) 1f else 0.75f
 
                 Box(
-                    modifier = Modifier.height(itemHeightPx.dp),
+                    modifier = Modifier.height(itemHeight),
                     contentAlignment = Alignment.Center
                 ) {
                     if (value != null) {

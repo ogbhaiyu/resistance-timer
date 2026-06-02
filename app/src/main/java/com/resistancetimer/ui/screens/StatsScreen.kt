@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.resistancetimer.data.UsageSession
 import com.resistancetimer.ui.MainViewModel
 import kotlinx.coroutines.launch
@@ -30,8 +31,8 @@ fun StatsScreen(
     viewModel: MainViewModel,
     onBack: () -> Unit
 ) {
-    val sessions by viewModel.sessionsThisWeek.collectAsState()
-    val totalSeconds by viewModel.totalSecondsThisWeek.collectAsState()
+    val sessions by viewModel.sessionsThisWeek.collectAsStateWithLifecycle()
+    val totalSeconds by viewModel.totalSecondsThisWeek.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
