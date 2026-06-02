@@ -81,7 +81,8 @@ class AppWatcherService : Service() {
                     continue
                 }
 
-                val limit = db.appLimitDao().getLimit(foregroundPkg) ?: run {
+                val limit = db.appLimitDao().getLimit(foregroundPkg)
+                if (limit == null) {
                     flushCurrentSession(now)
                     continue
                 }

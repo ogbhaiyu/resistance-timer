@@ -1,5 +1,7 @@
 package com.resistancetimer.ui.screens
 
+@file:OptIn(ExperimentalMaterial3Api::class)
+
 import android.graphics.drawable.Drawable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
@@ -87,7 +89,7 @@ fun HomeScreen(
                         onRemove = { viewModel.removeAppLimit(limit.packageName) }
                     )
                 }
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                Divider(modifier = Modifier.padding(vertical = 8.dp))
             }
 
             // Search
@@ -191,7 +193,7 @@ private fun ActiveLimitRow(
             }
             Spacer(Modifier.height(6.dp))
             LinearProgressIndicator(
-                progress = { progress },
+                progress = progress,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(6.dp),
