@@ -1,6 +1,6 @@
-package com.resistancetimer.ui.screens
-
 @file:OptIn(ExperimentalMaterial3Api::class)
+
+package com.resistancetimer.ui.screens
 
 import android.graphics.drawable.Drawable
 import androidx.compose.foundation.Image
