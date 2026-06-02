@@ -3,53 +3,35 @@
 package com.resistancetimer.ui.screens
 
 import android.graphics.drawable.Drawable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Slider
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -60,6 +42,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.resistancetimer.data.AppLimit
 import com.resistancetimer.data.TrackedApp
 import com.resistancetimer.ui.MainViewModel
+import com.resistancetimer.ui.theme.EmeraldGreen
+import com.resistancetimer.ui.theme.ObsidianBg
+import kotlin.math.roundToInt
 
 @Composable
 fun HomeScreen(
@@ -84,21 +69,41 @@ fun HomeScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Resistance Timer", fontWeight = FontWeight.Bold) },
+                title = {
+                    Text(
+                        text = "Resistance Timer",
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 0.5.sp
+                    )
+                },
                 actions = {
-                    IconButton(onClick = onNavigateToStats) {
-                        Icon(Icons.Default.BarChart, contentDescription = "Stats")
+                    IconButton(
+                        onClick = onNavigateToStats,
+                        modifier = Modifier
+                            .padding(end = 8.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.05f))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.BarChart,
+                            contentDescription = "Stats",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = ObsidianBg
+                )
             )
-        }
+        },
+        containerColor = ObsidianBg
     ) { padding ->
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item(key = "summary") {
                 DailyLimitSummary(appLimits = appLimits)
@@ -132,13 +137,33 @@ fun HomeScreen(
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
-                    placeholder = { Text("Search apps") },
+                    placeholder = {
+                        Text(
+                            "Search apps",
+                            color = Color.White.copy(alpha = 0.35f),
+                            fontSize = 14.sp
+                        )
+                    },
                     leadingIcon = {
-                        Icon(Icons.Default.Search, contentDescription = null)
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = null,
+                            tint = Color.White.copy(alpha = 0.4f)
+                        )
                     },
                     singleLine = true,
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.fillMaxWidth()
+                    shape = RoundedCornerShape(24.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = MaterialTheme.colorScheme.surface,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                        focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                        unfocusedBorderColor = Color.White.copy(alpha = 0.08f),
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp)
                 )
             }
 
@@ -202,63 +227,161 @@ private fun DailyLimitSummary(appLimits: List<AppLimit>) {
     val remaining = (totalAllowance - totalUsed).coerceAtLeast(0)
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(24.dp)),
+        shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer
+            containerColor = MaterialTheme.colorScheme.surface
         )
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(20.dp)) {
             Text(
-                text = if (appLimits.isEmpty()) "No limits set yet" else "Today at a glance",
+                text = if (appLimits.isEmpty()) "No Limits Set Yet" else "Today at a Glance",
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
+                fontWeight = FontWeight.Black,
+                color = Color.White
             )
 
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(16.dp))
 
             if (appLimits.isEmpty()) {
                 Text(
-                    text = "Your daily watchlist is empty.",
+                    text = "Your daily watchlist is empty. Set limits on distracting apps below to begin fighting Resistance.",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.72f)
+                    color = Color.White.copy(alpha = 0.6f),
+                    lineHeight = 22.sp
                 )
             } else {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Bottom
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    SummaryMetric(
-                        label = "Used",
-                        value = formatDuration(totalUsed)
+                    // Circular Dial Progress Chart
+                    CircularDialProgress(
+                        progress = progress,
+                        modifier = Modifier.padding(end = 16.dp)
                     )
-                    SummaryMetric(
-                        label = "Left",
-                        value = formatDuration(remaining)
-                    )
-                    SummaryMetric(
-                        label = "Apps",
-                        value = appLimits.size.toString()
-                    )
+
+                    // Summary statistics
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            SummaryMetric(
+                                label = "Used",
+                                value = formatDuration(totalUsed)
+                            )
+                            SummaryMetric(
+                                label = "Left",
+                                value = formatDuration(remaining)
+                            )
+                            SummaryMetric(
+                                label = "Apps",
+                                value = appLimits.size.toString()
+                            )
+                        }
+
+                        // Status message
+                        val statusText = when {
+                            progress >= 1f -> "Resistance wins. Lockout active."
+                            progress >= 0.8f -> "Danger zone. Close the apps."
+                            progress >= 0.5f -> "Halfway gone. Keep focused."
+                            else -> "Doing great. Stay mindful!"
+                        }
+                        val statusColor = when {
+                            progress >= 1f -> MaterialTheme.colorScheme.error
+                            progress >= 0.8f -> MaterialTheme.colorScheme.secondary
+                            else -> EmeraldGreen
+                        }
+
+                        Text(
+                            text = statusText,
+                            color = statusColor,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(statusColor.copy(alpha = 0.1f))
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                        )
+                    }
                 }
-
-                Spacer(Modifier.height(12.dp))
-
-                LinearProgressIndicator(
-                    progress = progress,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(6.dp),
-                    color = if (progress >= 1f) {
-                        MaterialTheme.colorScheme.error
-                    } else {
-                        MaterialTheme.colorScheme.primary
-                    },
-                    trackColor = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.14f)
-                )
             }
+        }
+    }
+}
+
+@Composable
+private fun CircularDialProgress(progress: Float, modifier: Modifier = Modifier) {
+    val animatedProgress by animateFloatAsState(
+        targetValue = progress,
+        animationSpec = tween(1000, easing = FastOutSlowInEasing),
+        label = "progress"
+    )
+    val progressColor = if (progress >= 1f) {
+        MaterialTheme.colorScheme.error
+    } else {
+        MaterialTheme.colorScheme.primary
+    }
+    val trackColor = Color.White.copy(alpha = 0.08f)
+
+    Box(
+        modifier = modifier.size(108.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val strokeWidth = 8.dp.toPx()
+            val innerSize = size.minDimension - strokeWidth
+            val topLeft = Offset(
+                (size.width - innerSize) / 2,
+                (size.height - innerSize) / 2
+            )
+            val innerBoxSize = Size(innerSize, innerSize)
+
+            // Background Track Arc (270 degrees clockwise starting at -225)
+            drawArc(
+                color = trackColor,
+                startAngle = -225f,
+                sweepAngle = 270f,
+                useCenter = false,
+                topLeft = topLeft,
+                size = innerBoxSize,
+                style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+            )
+
+            // Progress Arc
+            drawArc(
+                color = progressColor,
+                startAngle = -225f,
+                sweepAngle = 270f * animatedProgress,
+                useCenter = false,
+                topLeft = topLeft,
+                size = innerBoxSize,
+                style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+            )
+        }
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = "${(progress * 100).roundToInt()}%",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Black,
+                color = Color.White
+            )
+            Text(
+                text = "of limit",
+                fontSize = 10.sp,
+                color = Color.White.copy(alpha = 0.5f),
+                fontWeight = FontWeight.Medium
+            )
         }
     }
 }
@@ -268,14 +391,15 @@ private fun SummaryMetric(label: String, value: String) {
     Column {
         Text(
             text = value,
-            style = MaterialTheme.typography.titleLarge,
+            fontSize = 18.sp,
             fontWeight = FontWeight.Black,
-            color = MaterialTheme.colorScheme.onPrimaryContainer
+            color = Color.White
         )
         Text(
             text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color.White.copy(alpha = 0.4f)
         )
     }
 }
@@ -284,9 +408,11 @@ private fun SummaryMetric(label: String, value: String) {
 private fun SectionLabel(text: String) {
     Text(
         text = text.uppercase(),
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.52f),
-        modifier = Modifier.padding(top = 4.dp)
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Black,
+        letterSpacing = 1.2.sp,
+        color = Color.White.copy(alpha = 0.4f),
+        modifier = Modifier.padding(top = 4.dp, start = 4.dp)
     )
 }
 
@@ -306,62 +432,99 @@ private fun ActiveLimitRow(
     val remaining = (totalAllowance - limit.usedSecondsToday).coerceAtLeast(0)
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(20.dp)),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
+        Column(modifier = Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                AppIcon(icon = icon)
+                AppIcon(
+                    icon = icon,
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                )
                 Spacer(Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = limit.appLabel,
-                        fontWeight = FontWeight.SemiBold,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp,
+                        color = Color.White,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        text = "${formatDuration(limit.usedSecondsToday)} used, ${formatDuration(remaining)} left",
+                        text = "${formatDuration(limit.usedSecondsToday)} used • ${formatDuration(remaining)} remaining",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.66f),
+                        color = Color.White.copy(alpha = 0.6f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                     if (limit.extraSecondsEarned > 0) {
                         Text(
-                            text = "${formatDuration(limit.extraSecondsEarned)} extra added today",
-                            style = MaterialTheme.typography.labelSmall,
+                            text = "+${formatDuration(limit.extraSecondsEarned)} added",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.secondary
                         )
                     }
                 }
-                IconButton(onClick = onEdit, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Default.Edit, contentDescription = "Edit limit", modifier = Modifier.size(18.dp))
-                }
-                IconButton(onClick = onRemove, modifier = Modifier.size(36.dp)) {
+                IconButton(
+                    onClick = onEdit,
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.03f))
+                ) {
                     Icon(
-                        Icons.Default.Delete,
+                        imageVector = Icons.Default.Edit,
+                        contentDescription = "Edit limit",
+                        modifier = Modifier.size(16.dp),
+                        tint = Color.White.copy(alpha = 0.7f)
+                    )
+                }
+                Spacer(Modifier.width(6.dp))
+                IconButton(
+                    onClick = onRemove,
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(Color.Red.copy(alpha = 0.05f))
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
                         contentDescription = "Remove limit",
-                        modifier = Modifier.size(18.dp),
+                        modifier = Modifier.size(16.dp),
                         tint = MaterialTheme.colorScheme.error
                     )
                 }
             }
 
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(12.dp))
+
+            val progressAnimated by animateFloatAsState(
+                targetValue = progress,
+                animationSpec = tween(500),
+                label = "rowProgress"
+            )
 
             LinearProgressIndicator(
-                progress = progress,
+                progress = progressAnimated,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(6.dp),
+                    .height(6.dp)
+                    .clip(RoundedCornerShape(3.dp)),
                 color = if (progress >= 1f) {
                     MaterialTheme.colorScheme.error
+                } else if (progress >= 0.8f) {
+                    MaterialTheme.colorScheme.secondary
                 } else {
                     MaterialTheme.colorScheme.primary
                 },
-                trackColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+                trackColor = Color.White.copy(alpha = 0.05f)
             )
         }
     }
@@ -372,8 +535,8 @@ private fun AppIcon(icon: Drawable?, modifier: Modifier = Modifier) {
     if (icon == null) {
         Box(
             modifier = modifier
-                .size(40.dp)
-                .clip(RoundedCornerShape(8.dp))
+                .size(44.dp)
+                .background(Color.White.copy(alpha = 0.08f))
         )
         return
     }
@@ -382,9 +545,7 @@ private fun AppIcon(icon: Drawable?, modifier: Modifier = Modifier) {
     Image(
         bitmap = bitmap,
         contentDescription = null,
-        modifier = modifier
-            .size(40.dp)
-            .clip(RoundedCornerShape(8.dp))
+        modifier = modifier.size(44.dp)
     )
 }
 
@@ -396,11 +557,13 @@ private fun AppListRow(
 ) {
     Card(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(16.dp)),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (limit != null) {
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.28f)
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.04f)
             } else {
                 MaterialTheme.colorScheme.surface
             }
@@ -412,12 +575,19 @@ private fun AppListRow(
                 .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            AppIcon(icon = app.icon)
+            AppIcon(
+                icon = app.icon,
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(10.dp))
+            )
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = app.label,
                     style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -425,20 +595,30 @@ private fun AppListRow(
                     Text(
                         text = "${formatDuration(limit.usedSecondsToday)} used today",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.58f)
+                        color = Color.White.copy(alpha = 0.5f)
                     )
                 }
             }
             Spacer(Modifier.width(8.dp))
             Text(
-                text = limit?.let { "${it.dailyLimitSeconds / 60}m/day" } ?: "Set",
-                style = MaterialTheme.typography.labelLarge,
+                text = limit?.let { "${it.dailyLimitSeconds / 60}m/day" } ?: "Set Limit",
+                fontSize = 13.sp,
                 color = if (limit != null) {
                     MaterialTheme.colorScheme.primary
                 } else {
-                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.52f)
+                    Color.White.copy(alpha = 0.5f)
                 },
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(
+                        if (limit != null) {
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                        } else {
+                            Color.White.copy(alpha = 0.04f)
+                        }
+                    )
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
             )
         }
     }
@@ -447,18 +627,20 @@ private fun AppListRow(
 @Composable
 private fun EmptySearchState(searchQuery: String) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(16.dp)),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
         Text(
             text = "No apps found for \"$searchQuery\".",
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+            color = Color.White.copy(alpha = 0.5f),
             textAlign = TextAlign.Center,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(18.dp)
+                .padding(20.dp)
         )
     }
 }
@@ -479,69 +661,104 @@ fun SetLimitDialog(
             Text(
                 text = "Daily limit for $appLabel",
                 maxLines = 2,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
+                fontWeight = FontWeight.Black
             )
         },
         text = {
             Column {
                 Text(
-                    "Daily allowance",
+                    "Set your daily scrolling allowance",
                     style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White.copy(alpha = 0.7f),
                     modifier = Modifier.padding(bottom = 12.dp)
                 )
 
                 Text(
-                    "Quick pick",
+                    "QUICK PRESETS",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White.copy(alpha = 0.4f)
                 )
                 Spacer(Modifier.height(8.dp))
 
                 listOf(presets.take(4), presets.drop(4)).forEach { row ->
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier.padding(bottom = 6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.padding(bottom = 8.dp)
                     ) {
                         row.forEach { mins ->
                             FilterChip(
                                 selected = selectedMinutes == mins,
                                 onClick = { selectedMinutes = mins },
-                                label = { Text("${mins}m", fontSize = 12.sp) }
+                                label = { Text("${mins}m", fontWeight = FontWeight.Bold) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                    selectedLabelColor = Color.White,
+                                    containerColor = Color.White.copy(alpha = 0.04f),
+                                    labelColor = Color.White.copy(alpha = 0.7f)
+                                ),
+                                border = FilterChipDefaults.filterChipBorder(
+                                    borderColor = Color.White.copy(alpha = 0.08f),
+                                    selectedBorderColor = Color.Transparent,
+                                    borderWidth = 1.dp
+                                )
                             )
                         }
                     }
                 }
 
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(16.dp))
 
-                Text(
-                    "$selectedMinutes minutes",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "Custom allowance",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.5f)
+                    )
+                    Text(
+                        "$selectedMinutes minutes",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Black,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                Spacer(Modifier.height(4.dp))
                 Slider(
                     value = selectedMinutes.toFloat(),
                     onValueChange = { selectedMinutes = it.toInt().coerceIn(1, 120) },
                     valueRange = 1f..120f,
-                    steps = 118
+                    steps = 118,
+                    colors = SliderDefaults.colors(
+                        thumbColor = MaterialTheme.colorScheme.primary,
+                        activeTrackColor = MaterialTheme.colorScheme.primary,
+                        inactiveTrackColor = Color.White.copy(alpha = 0.08f)
+                    )
                 )
             }
         },
         confirmButton = {
-            Button(onClick = { onConfirm(selectedMinutes) }) {
-                Text("Save")
+            Button(
+                onClick = { onConfirm(selectedMinutes) },
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("Save Limit", fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
-        }
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", color = Color.White.copy(alpha = 0.6f))
+            }
+        },
+        containerColor = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(24.dp),
+        modifier = Modifier.border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(24.dp))
     )
 }
-
-private data class LimitDialogTarget(
-    val packageName: String,
-    val label: String
-)
 
 private fun formatDuration(seconds: Int): String {
     val safeSeconds = seconds.coerceAtLeast(0)

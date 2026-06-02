@@ -6,7 +6,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,8 +20,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -97,39 +102,39 @@ enum class ResistanceLevel(
     MILD(
         minutes    = 5,
         label      = "5 minutes",
-        color      = Color(0xFFFF7043),
-        dimAlpha   = 0.60f,
+        color      = Color(0xFFFF9F0A), // Neon Orange
+        dimAlpha   = 0.65f,
         quote      = "\"Resistance is always lying and always full of shit.\"",
         quoteAttrib = "The War of Art"
     ),
     MODERATE(
         minutes    = 10,
         label      = "10 minutes",
-        color      = Color(0xFFE53935),
-        dimAlpha   = 0.72f,
+        color      = Color(0xFFFF453A), // Modern Red
+        dimAlpha   = 0.75f,
         quote      = "\"The more Resistance you experience, the more important this unfinished calling is to your soul.\"",
         quoteAttrib = "The War of Art"
     ),
     HIGH(
         minutes    = 20,
         label      = "20 minutes",
-        color      = Color(0xFFB71C1C),
-        dimAlpha   = 0.82f,
+        color      = Color(0xFFFF2D55), // Vibrant Crimson
+        dimAlpha   = 0.84f,
         quote      = "\"Most of us have two lives: the life we live, and the unlived life within us. Between the two stands Resistance.\"",
         quoteAttrib = "The War of Art"
     ),
     DEEP(
         minutes    = 30,
         label      = "30 minutes",
-        color      = Color(0xFF7B0000),
+        color      = Color(0xFFBD0000), // Deep Red
         dimAlpha   = 0.90f,
         quote      = "\"Resistance has beaten you today. It knows exactly which buttons to push. It's been doing this your whole life.\"",
-        quoteAttrib = "Paraphrasing Pressfield"
+        quoteAttrib = "The War of Art"
     ),
     SURRENDERED(
         minutes    = 60,
         label      = "1 hour",
-        color      = Color(0xFF3E0000),
+        color      = Color(0xFF6A0000), // Dark Obsidian Burgundy
         dimAlpha   = 0.95f,
         quote      = "\"Are you a writer who doesn't write, a painter who doesn't paint, an entrepreneur who never starts a venture? Then you know what Resistance is.\"",
         quoteAttrib = "The War of Art"
@@ -169,6 +174,7 @@ fun MinuteDrum(
     }
     val itemHeight = 72.dp
     val itemHeightPx = with(LocalDensity.current) { itemHeight.toPx() }
+    val haptic = LocalHapticFeedback.current
 
     var dragAccumulator by remember { mutableFloatStateOf(0f) }
 
@@ -186,6 +192,7 @@ fun MinuteDrum(
                         val newIndex = (currentIndex + steps).coerceIn(0, options.lastIndex)
                         if (newIndex != currentIndex) {
                             onMinutesChange(options[newIndex])
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             dragAccumulator = 0f
                         }
                     }
@@ -202,47 +209,79 @@ fun MinuteDrum(
                 val idx = currentIndex + offset
                 val value = options.getOrNull(idx)
                 val isCurrent = offset == 0
-                val alpha = when (kotlin.math.abs(offset)) {
+                val targetAlpha = when (kotlin.math.abs(offset)) {
                     0 -> 1f
                     1 -> 0.45f
-                    else -> 0.15f
+                    else -> 0.12f
                 }
-                val scale = if (isCurrent) 1f else 0.75f
+                val targetScale = if (isCurrent) 1.25f else 0.85f
+                val targetRotationX = -25f * offset
+
+                val animatedAlpha by animateFloatAsState(
+                    targetValue = if (value != null) targetAlpha else 0f,
+                    animationSpec = spring(stiffness = Spring.StiffnessLow),
+                    label = "alpha_$offset"
+                )
+                val animatedScale by animateFloatAsState(
+                    targetValue = targetScale,
+                    animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+                    label = "scale_$offset"
+                )
+                val animatedRotationX by animateFloatAsState(
+                    targetValue = targetRotationX,
+                    animationSpec = spring(stiffness = Spring.StiffnessLow),
+                    label = "rot_$offset"
+                )
 
                 Box(
-                    modifier = Modifier.height(itemHeight),
+                    modifier = Modifier
+                        .height(itemHeight)
+                        .graphicsLayer {
+                            alpha = animatedAlpha
+                            scaleX = animatedScale
+                            scaleY = animatedScale
+                            rotationX = animatedRotationX
+                            cameraDistance = 8 * density
+                        },
                     contentAlignment = Alignment.Center
                 ) {
                     if (value != null) {
                         val label = if (value == 60) "1 hr" else "${value}m"
                         Text(
                             text  = label,
-                            fontSize = if (isCurrent) 42.sp else 26.sp,
-                            fontWeight = if (isCurrent) FontWeight.Black else FontWeight.Normal,
-                            color = if (isCurrent) accentColor else Color.White.copy(alpha = alpha),
-                            modifier = Modifier.animateContentSize()
+                            fontSize = 32.sp,
+                            fontWeight = if (isCurrent) FontWeight.Black else FontWeight.Medium,
+                            color = if (isCurrent) accentColor else Color.White
                         )
                     }
                 }
             }
         }
 
-        // Selection highlight lines
+        // Selection highlight lines: Double thin high-tech glowing lines
         Box(
             modifier = Modifier
                 .align(Alignment.Center)
-                .fillMaxWidth(0.55f)
-                .height(2.dp)
+                .fillMaxWidth(0.65f)
+                .height(1.5.dp)
                 .offset(y = (-36).dp)
-                .background(accentColor.copy(alpha = 0.5f), RoundedCornerShape(1.dp))
+                .background(
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(Color.Transparent, accentColor.copy(alpha = 0.8f), Color.Transparent)
+                    )
+                )
         )
         Box(
             modifier = Modifier
                 .align(Alignment.Center)
-                .fillMaxWidth(0.55f)
-                .height(2.dp)
+                .fillMaxWidth(0.65f)
+                .height(1.5.dp)
                 .offset(y = 36.dp)
-                .background(accentColor.copy(alpha = 0.5f), RoundedCornerShape(1.dp))
+                .background(
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(Color.Transparent, accentColor.copy(alpha = 0.8f), Color.Transparent)
+                    )
+                )
         )
 
         // Fade top + bottom edges
@@ -250,10 +289,10 @@ fun MinuteDrum(
             modifier = Modifier
                 .fillMaxSize()
                 .drawBehind {
-                    val fadeH = size.height * 0.28f
+                    val fadeH = size.height * 0.35f
                     drawRect(
                         brush = Brush.verticalGradient(
-                            0f to Color(0xFF1A1A1A),
+                            0f to Color(0xFF141420),
                             1f to Color.Transparent,
                             startY = 0f,
                             endY = fadeH
@@ -262,7 +301,7 @@ fun MinuteDrum(
                     drawRect(
                         brush = Brush.verticalGradient(
                             0f to Color.Transparent,
-                            1f to Color(0xFF1A1A1A),
+                            1f to Color(0xFF141420),
                             startY = size.height - fadeH,
                             endY = size.height
                         )
@@ -297,7 +336,7 @@ fun ResistanceAlertOverlay(
         label        = "dim"
     )
     val animatedColor by animateColorAsState(
-        targetValue  = if (showExtend) level.color else Color(0xFFE53935),
+        targetValue  = if (showExtend) level.color else Color(0xFFFF3B30),
         animationSpec = tween(500),
         label        = "accentColor"
     )
@@ -311,8 +350,19 @@ fun ResistanceAlertOverlay(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                .background(Color(0xFF1A1A1A))
+                .clip(RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp))
+                .border(
+                    width = 1.dp,
+                    brush = Brush.verticalGradient(
+                        colors = listOf(Color.White.copy(alpha = 0.12f), Color.Transparent)
+                    ),
+                    shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)
+                )
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(Color(0xFF141420), Color(0xFF08080C))
+                    )
+                )
                 .padding(horizontal = 24.dp, vertical = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -341,7 +391,7 @@ fun ResistanceAlertOverlay(
                             fontSize = 21.sp,
                             fontWeight = FontWeight.Black,
                             color = animatedColor,
-                            letterSpacing = 1.sp
+                            letterSpacing = 1.5.sp
                         )
                         Spacer(Modifier.height(6.dp))
                         Text(
@@ -354,13 +404,13 @@ fun ResistanceAlertOverlay(
                         Text(
                             text = "\"Resistance will tell you anything to keep you from doing your work.\"",
                             fontSize = 13.sp,
-                            color = Color(0xFFFF7043),
+                            color = Color(0xFFFF9F0A),
                             textAlign = TextAlign.Center,
                             fontWeight = FontWeight.Medium,
                             lineHeight = 19.sp
                         )
                         Text(
-                            "— Steven Pressfield, The War of Art",
+                            "— The War of Art",
                             fontSize = 10.sp,
                             color = Color.White.copy(alpha = 0.35f),
                             modifier = Modifier.padding(top = 3.dp)
@@ -438,16 +488,24 @@ fun ResistanceAlertOverlay(
 
             Spacer(Modifier.height(12.dp))
 
-            // Primary: done
+            // Primary: done (Victory Forest-Green Gradient Button)
             Button(
                 onClick = onDone,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(52.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
-                shape  = RoundedCornerShape(14.dp)
+                    .height(54.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(16.dp))
+                    .background(
+                        brush = Brush.horizontalGradient(
+                            colors = listOf(Color(0xFF2E7D32), Color(0xFF1B5E20))
+                        )
+                    ),
+                colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                shape  = RoundedCornerShape(16.dp),
+                contentPadding = PaddingValues()
             ) {
-                Text("I'm done. Resistance loses. 💪", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                Text("I'm done. Resistance loses. 💪", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.White)
             }
 
             Spacer(Modifier.height(8.dp))
@@ -463,29 +521,41 @@ fun ResistanceAlertOverlay(
                         onClick  = { showExtend = true },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(52.dp),
-                        shape    = RoundedCornerShape(14.dp),
+                            .height(54.dp),
+                        shape    = RoundedCornerShape(16.dp),
+                        border   = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
                         colors   = ButtonDefaults.outlinedButtonColors(
-                            contentColor = Color.White.copy(alpha = 0.55f)
+                            contentColor = Color.White.copy(alpha = 0.7f),
+                            containerColor = Color.White.copy(alpha = 0.04f)
                         )
                     ) {
                         Text("Give me more time… (Resistance wins this round)", fontSize = 13.sp)
                     }
                 } else {
                     Column {
+                        // Confirm Extension Gradient Button
                         Button(
                             onClick  = { onExtend(pickedMinutes) },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(52.dp),
-                            colors   = ButtonDefaults.buttonColors(containerColor = animatedColor),
-                            shape    = RoundedCornerShape(14.dp)
+                                .height(54.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(16.dp))
+                                .background(
+                                    brush = Brush.horizontalGradient(
+                                        colors = listOf(animatedColor, animatedColor.copy(alpha = 0.6f))
+                                    )
+                                ),
+                            colors   = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                            shape    = RoundedCornerShape(16.dp),
+                            contentPadding = PaddingValues()
                         ) {
                             val label = if (pickedMinutes == 60) "1 hour" else "$pickedMinutes minutes"
                             Text(
                                 "Give me $label more",
                                 fontSize = 15.sp,
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
                             )
                         }
                         Spacer(Modifier.height(6.dp))

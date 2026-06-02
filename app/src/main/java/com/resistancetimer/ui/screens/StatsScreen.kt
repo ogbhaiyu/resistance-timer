@@ -1,10 +1,19 @@
+@file:OptIn(ExperimentalMaterial3Api::class)
+
 package com.resistancetimer.ui.screens
 
 import android.content.Context
 import android.content.Intent
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Share
@@ -12,6 +21,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -21,11 +35,13 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.resistancetimer.data.UsageSession
 import com.resistancetimer.ui.MainViewModel
+import com.resistancetimer.ui.theme.EmeraldGreen
+import com.resistancetimer.ui.theme.ObsidianBg
+import com.resistancetimer.ui.theme.ResistanceRed
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StatsScreen(
     viewModel: MainViewModel,
@@ -45,30 +61,61 @@ fun StatsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Your Progress") },
+                title = {
+                    Text(
+                        "Your Progress",
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 0.5.sp
+                    )
+                },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    IconButton(
+                        onClick = onBack,
+                        modifier = Modifier
+                            .padding(start = 8.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.05f))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ArrowBack,
+                            contentDescription = "Back",
+                            tint = Color.White
+                        )
                     }
                 },
                 actions = {
-                    IconButton(onClick = {
-                        scope.launch {
-                            shareStats(context, totalSeconds, improvementPercent, sessions.size)
-                        }
-                    }) {
-                        Icon(Icons.Default.Share, contentDescription = "Share")
+                    IconButton(
+                        onClick = {
+                            scope.launch {
+                                shareStats(context, totalSeconds, improvementPercent, sessions.size)
+                            }
+                        },
+                        modifier = Modifier
+                            .padding(end = 8.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.05f))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "Share",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = ObsidianBg
+                )
             )
-        }
+        },
+        containerColor = ObsidianBg
     ) { padding ->
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            contentPadding = PaddingValues(bottom = 24.dp)
         ) {
             // Summary card
             item {
@@ -79,27 +126,50 @@ fun StatsScreen(
                 )
             }
 
-            // Per-app breakdown
+            // Custom Canvas Bar Chart for weekly scrolling times
+            item {
+                WeeklyUsageChart(sessions = sessions)
+            }
+
+            // Per-app breakdown title
             item {
                 Text(
-                    "This Week's Sessions",
+                    text = "Session History",
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Black,
+                    color = Color.White,
+                    modifier = Modifier.padding(top = 8.dp, start = 4.dp)
                 )
             }
 
             if (sessions.isEmpty()) {
                 item {
-                    Text(
-                        "No sessions yet. Start a timer to track your scrolling!",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                    )
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(16.dp)),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    ) {
+                        Text(
+                            text = "No sessions recorded this week. Your scrolling habits are under control! Keep it up.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White.copy(alpha = 0.5f),
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(24.dp),
+                            lineHeight = 22.sp
+                        )
+                    }
                 }
-            }
-
-            items(sessions) { session ->
-                SessionRow(session)
+            } else {
+                items(
+                    items = sessions,
+                    key = { "session-${it.startTimeMillis}" }
+                ) { session ->
+                    SessionRow(session)
+                }
             }
         }
     }
@@ -112,78 +182,226 @@ fun ShareableStatsCard(
     sessionCount: Int
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(24.dp)),
+        shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer
+            containerColor = MaterialTheme.colorScheme.surface
         )
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(24.dp),
+                .padding(20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(
-                text = "⚔️ RESISTANCE REPORT",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Black,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
-            )
+            // Header Pill Badge
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(
+                        brush = Brush.horizontalGradient(
+                            colors = listOf(ResistanceRed, Color(0xFFFF5252))
+                        )
+                    )
+                    .padding(horizontal = 14.dp, vertical = 6.dp)
+            ) {
+                Text(
+                    text = "⚔️ RESISTANCE REPORT",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Color.White,
+                    letterSpacing = 1.2.sp
+                )
+            }
 
             Spacer(Modifier.height(16.dp))
 
-            // Total time
+            // Total Time Value
             val hours = totalSeconds / 3600
             val minutes = (totalSeconds % 3600) / 60
             Text(
                 text = if (hours > 0) "${hours}h ${minutes}m" else "${minutes}m",
-                fontSize = 48.sp,
+                fontSize = 44.sp,
                 fontWeight = FontWeight.Black,
-                color = MaterialTheme.colorScheme.primary
+                color = Color.White,
+                letterSpacing = (-1).sp
             )
             Text(
-                text = "total scrolling this week",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                text = "spent doomscrolling this week",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color.White.copy(alpha = 0.5f)
             )
 
             Spacer(Modifier.height(16.dp))
 
-            // Improvement
+            // Trend Indicator Badge
             if (improvementPercent != 0) {
                 val isImproved = improvementPercent > 0
-                Text(
-                    text = if (isImproved)
-                        "📉 ${improvementPercent}% LESS than last week"
-                    else
-                        "📈 ${-improvementPercent}% MORE than last week",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (isImproved) Color(0xFF4CAF50) else Color(0xFFE53935)
-                )
+                val badgeColor = if (isImproved) EmeraldGreen else ResistanceRed
+                val trendText = if (isImproved) {
+                    "📉 $improvementPercent% LESS time scrolling"
+                } else {
+                    "📈 ${-improvementPercent}% MORE time scrolling"
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(badgeColor.copy(alpha = 0.1f))
+                        .border(1.dp, badgeColor.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = trendText,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = badgeColor
+                    )
+                }
             } else {
                 Text(
-                    text = "First week tracking — keep going!",
-                    style = MaterialTheme.typography.bodyMedium
+                    text = "Starting block — building your weekly baseline",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.secondary
                 )
             }
 
             Spacer(Modifier.height(12.dp))
 
             Text(
-                text = "$sessionCount sessions tracked",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
+                text = "$sessionCount total sessions tracked",
+                fontSize = 11.sp,
+                color = Color.White.copy(alpha = 0.4f),
+                fontWeight = FontWeight.Medium
             )
+        }
+    }
+}
 
-            Spacer(Modifier.height(16.dp))
+@Composable
+fun WeeklyUsageChart(sessions: List<UsageSession>) {
+    val dailyMinutes = remember(sessions) {
+        val seconds = DoubleArray(7)
+        val calendar = Calendar.getInstance()
+        sessions.forEach { session ->
+            calendar.timeInMillis = session.startTimeMillis
+            val dayOfWeek = calendar.get(Calendar.DAY_OF_WEEK)
+            val index = when (dayOfWeek) {
+                Calendar.MONDAY -> 0
+                Calendar.TUESDAY -> 1
+                Calendar.WEDNESDAY -> 2
+                Calendar.THURSDAY -> 3
+                Calendar.FRIDAY -> 4
+                Calendar.SATURDAY -> 5
+                Calendar.SUNDAY -> 6
+                else -> 0
+            }
+            seconds[index] += session.durationSeconds.toDouble()
+        }
+        seconds.map { (it / 60.0) }
+    }
 
+    val maxMinutes = remember(dailyMinutes) {
+        dailyMinutes.maxOrNull()?.coerceAtLeast(15.0) ?: 15.0
+    }
+
+    val dayLabels = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(24.dp)),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
             Text(
-                text = "\"Put. The. Phone. Down.\" — Pressfield (probably)",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.5f),
-                textAlign = TextAlign.Center
+                text = "Weekly Activity",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Black,
+                color = Color.White
             )
+            Spacer(Modifier.height(24.dp))
+
+            // Canvas drawing the bar chart
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(140.dp)
+            ) {
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val barCount = 7
+                    val spacing = 18.dp.toPx()
+                    val totalWidth = size.width
+                    val barWidth = (totalWidth - (spacing * (barCount - 1))) / barCount
+                    val canvasHeight = size.height
+
+                    for (i in 0 until barCount) {
+                        val minutes = dailyMinutes[i]
+                        val rawRatio = (minutes / maxMinutes).toFloat()
+                        val animRatio = rawRatio.coerceIn(0f, 1f)
+
+                        val x = i * (barWidth + spacing)
+                        val barHeight = canvasHeight * animRatio
+
+                        // Draw background track bar
+                        drawRoundRect(
+                            color = Color.White.copy(alpha = 0.04f),
+                            topLeft = Offset(x, 0f),
+                            size = Size(barWidth, canvasHeight),
+                            cornerRadius = CornerRadius(6.dp.toPx())
+                        )
+
+                        // Draw active progress bar
+                        if (barHeight > 0f) {
+                            val activeBrush = Brush.verticalGradient(
+                                colors = listOf(ResistanceRed, ResistanceRed.copy(alpha = 0.5f))
+                            )
+                            drawRoundRect(
+                                brush = activeBrush,
+                                topLeft = Offset(x, canvasHeight - barHeight),
+                                size = Size(barWidth, barHeight),
+                                cornerRadius = CornerRadius(6.dp.toPx())
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            // Day labels and values
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                for (i in 0 until 7) {
+                    val mins = dailyMinutes[i].roundToInt()
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(
+                            text = if (mins > 0) "${mins}m" else "-",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (mins > 0) Color.White else Color.White.copy(alpha = 0.25f)
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = dayLabels[i],
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color.White.copy(alpha = 0.4f)
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -195,41 +413,60 @@ private fun SessionRow(session: UsageSession) {
     val seconds = session.durationSeconds % 60
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(16.dp)),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
         )
     ) {
         Row(
             modifier = Modifier
-                .padding(12.dp)
+                .padding(14.dp)
                 .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Timeline Bullet indicator
+            Box(
+                modifier = Modifier
+                    .size(10.dp)
+                    .clip(CircleShape)
+                    .background(
+                        if (session.extensions > 0) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            EmeraldGreen
+                        }
+                    )
+            )
+            Spacer(Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = session.appLabel,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                    color = Color.White
                 )
                 Text(
                     text = dateFormat.format(Date(session.startTimeMillis)),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    fontSize = 11.sp,
+                    color = Color.White.copy(alpha = 0.5f)
                 )
             }
             Column(horizontalAlignment = Alignment.End) {
                 Text(
                     text = "${minutes}m ${seconds}s",
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Black,
                     color = MaterialTheme.colorScheme.primary
                 )
                 if (session.extensions > 0) {
                     Text(
                         text = "+${session.extensions} extends",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.secondary
                     )
                 }
             }
@@ -257,7 +494,7 @@ $improvementText
 "The more Resistance you experience, the more important your unfinished work is to you."
 
 Fighting Resistance with @ResistanceTimer 💪
-#ResistanceTimer #WarOfArt #Pressfield
+#ResistanceTimer #WarOfArt
     """.trimIndent()
 
     val intent = Intent(Intent.ACTION_SEND).apply {
