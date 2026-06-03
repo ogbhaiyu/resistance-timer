@@ -3,13 +3,16 @@
 package com.resistancetimer.ui.screens
 
 import android.graphics.drawable.Drawable
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -32,9 +35,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
@@ -204,8 +210,10 @@ fun HomeScreen(
     val target = showLimitDialog
     if (target != null) {
         val currentLimit = limitsByPackage[target.packageName]
+        val app = installedApps.find { it.packageName == target.packageName }
         SetLimitDialog(
             appLabel = target.label,
+            appIcon = app?.icon,
             currentMinutes = currentLimit?.let { it.dailyLimitSeconds / 60 } ?: 20,
             onConfirm = { minutes ->
                 viewModel.setAppLimit(target.packageName, target.label, minutes)
@@ -649,6 +657,7 @@ private fun EmptySearchState(searchQuery: String) {
 @Composable
 fun SetLimitDialog(
     appLabel: String,
+    appIcon: Drawable?,
     currentMinutes: Int,
     onConfirm: (Int) -> Unit,
     onDismiss: () -> Unit
@@ -656,61 +665,170 @@ fun SetLimitDialog(
     var selectedMinutes by remember { mutableIntStateOf(currentMinutes.coerceIn(1, 120)) }
     val presets = listOf(5, 10, 15, 20, 30, 45, 60, 90)
 
-    AlertDialog(
+    Dialog(
         onDismissRequest = onDismiss,
-        title = {
-            Text(
-                text = "Daily limit for $appLabel",
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                fontWeight = FontWeight.Black
-            )
-        },
-        text = {
-            Column {
-                Text(
-                    "Set your daily scrolling allowance",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White.copy(alpha = 0.7f),
-                    modifier = Modifier.padding(bottom = 12.dp)
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.9f)
+                .wrapContentHeight()
+                .clip(RoundedCornerShape(28.dp))
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFF161622),
+                            Color(0xFF0C0C12)
+                        )
+                    )
                 )
-
-                Text(
-                    "QUICK PRESETS",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White.copy(alpha = 0.4f)
+                .border(
+                    width = 1.dp,
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = 0.12f),
+                            Color.White.copy(alpha = 0.02f)
+                        )
+                    ),
+                    shape = RoundedCornerShape(28.dp)
                 )
-                Spacer(Modifier.height(8.dp))
-
-                listOf(presets.take(4), presets.drop(4)).forEach { row ->
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    ) {
-                        row.forEach { mins ->
-                            FilterChip(
-                                selected = selectedMinutes == mins,
-                                onClick = { selectedMinutes = mins },
-                                label = { Text("${mins}m", fontWeight = FontWeight.Bold) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                    selectedLabelColor = Color.White,
-                                    containerColor = Color.White.copy(alpha = 0.04f),
-                                    labelColor = Color.White.copy(alpha = 0.7f)
-                                ),
-                                border = FilterChipDefaults.filterChipBorder(
-                                    borderColor = Color.White.copy(alpha = 0.08f),
-                                    selectedBorderColor = Color.Transparent,
-                                    borderWidth = 1.dp
+                .padding(24.dp)
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Header with App Icon and glowing background ring
+                Box(
+                    modifier = Modifier
+                        .size(72.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Color.White.copy(alpha = 0.03f))
+                        .border(
+                            width = 1.dp,
+                            color = Color.White.copy(alpha = 0.08f),
+                            shape = RoundedCornerShape(20.dp)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    // Faint radial glowing background under the icon
+                    Box(
+                        modifier = Modifier
+                            .size(60.dp)
+                            .background(
+                                brush = Brush.radialGradient(
+                                    colors = listOf(
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                        Color.Transparent
+                                    )
                                 )
                             )
-                        }
-                    }
+                    )
+                    AppIcon(
+                        icon = appIcon,
+                        modifier = Modifier
+                            .size(52.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                    )
                 }
 
                 Spacer(Modifier.height(16.dp))
 
+                Text(
+                    text = "Daily limit for $appLabel",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Color.White,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = "Set your daily scrolling allowance",
+                    fontSize = 13.sp,
+                    color = Color.White.copy(alpha = 0.5f),
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(Modifier.height(24.dp))
+
+                // Presets Title
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Start
+                ) {
+                    Text(
+                        "QUICK PRESETS",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 1.2.sp,
+                        color = Color.White.copy(alpha = 0.35f)
+                    )
+                }
+                Spacer(Modifier.height(10.dp))
+
+                // Preset Grid with sleek card buttons
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf(presets.take(4), presets.drop(4)).forEach { row ->
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            row.forEach { mins ->
+                                val isSelected = selectedMinutes == mins
+                                val presetScale by animateFloatAsState(
+                                    targetValue = if (isSelected) 1.05f else 1f,
+                                    animationSpec = tween(150),
+                                    label = "presetScale"
+                                )
+                                val presetGlowColor by animateColorAsState(
+                                    targetValue = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.02f),
+                                    animationSpec = tween(200),
+                                    label = "presetGlow"
+                                )
+                                val presetBorderColor by animateColorAsState(
+                                    targetValue = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.4f) else Color.White.copy(alpha = 0.08f),
+                                    animationSpec = tween(200),
+                                    label = "presetBorder"
+                                )
+
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(42.dp)
+                                        .graphicsLayer {
+                                            scaleX = presetScale
+                                            scaleY = presetScale
+                                        }
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(presetGlowColor)
+                                        .border(
+                                            width = 1.dp,
+                                            color = presetBorderColor,
+                                            shape = RoundedCornerShape(12.dp)
+                                        )
+                                        .clickable {
+                                            selectedMinutes = mins
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "${mins}m",
+                                        fontWeight = if (isSelected) FontWeight.Black else FontWeight.Bold,
+                                        fontSize = 13.sp,
+                                        color = if (isSelected) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.75f)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(28.dp))
+
+                // Custom Allowance Indicator
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -718,17 +836,20 @@ fun SetLimitDialog(
                 ) {
                     Text(
                         "Custom allowance",
-                        style = MaterialTheme.typography.bodySmall,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
                         color = Color.White.copy(alpha = 0.5f)
                     )
                     Text(
-                        "$selectedMinutes minutes",
+                        text = if (selectedMinutes == 60) "1 hour" else if (selectedMinutes == 120) "2 hours" else "$selectedMinutes minutes",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Black,
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(8.dp))
+                
+                // Slider
                 Slider(
                     value = selectedMinutes.toFloat(),
                     onValueChange = { selectedMinutes = it.toInt().coerceIn(1, 120) },
@@ -738,27 +859,69 @@ fun SetLimitDialog(
                         thumbColor = MaterialTheme.colorScheme.primary,
                         activeTrackColor = MaterialTheme.colorScheme.primary,
                         inactiveTrackColor = Color.White.copy(alpha = 0.08f)
-                    )
+                    ),
+                    modifier = Modifier.fillMaxWidth()
                 )
+
+                Spacer(Modifier.height(28.dp))
+
+                // Action Buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Cancel
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(50.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = Color.White.copy(alpha = 0.6f),
+                            containerColor = Color.Transparent
+                        )
+                    ) {
+                        Text(
+                            "Cancel",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
+                    }
+
+                    // Save Limit (Vibrant Primary Gradient Button)
+                    Button(
+                        onClick = { onConfirm(selectedMinutes) },
+                        modifier = Modifier
+                            .weight(1.3f)
+                            .height(50.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(14.dp))
+                            .background(
+                                brush = Brush.horizontalGradient(
+                                    colors = listOf(
+                                        MaterialTheme.colorScheme.primary,
+                                        MaterialTheme.colorScheme.secondary
+                                    )
+                                )
+                            ),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                        shape = RoundedCornerShape(14.dp),
+                        contentPadding = PaddingValues()
+                    ) {
+                        Text(
+                            "Save Limit",
+                            fontWeight = FontWeight.Black,
+                            fontSize = 14.sp,
+                            color = Color.White
+                        )
+                    }
+                }
             }
-        },
-        confirmButton = {
-            Button(
-                onClick = { onConfirm(selectedMinutes) },
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Text("Save Limit", fontWeight = FontWeight.Bold)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel", color = Color.White.copy(alpha = 0.6f))
-            }
-        },
-        containerColor = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(24.dp),
-        modifier = Modifier.border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(24.dp))
-    )
+        }
+    }
 }
 
 private fun formatDuration(seconds: Int): String {

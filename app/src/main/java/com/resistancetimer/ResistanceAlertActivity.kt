@@ -1,4 +1,6 @@
+@file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 package com.resistancetimer
+
 
 import android.content.Intent
 import android.os.Bundle
@@ -9,8 +11,9 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.pager.VerticalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -172,119 +175,98 @@ fun MinuteDrum(
     val currentIndex = remember(minutes) {
         options.indexOfFirst { it >= minutes }.takeIf { it >= 0 } ?: (options.size - 1)
     }
-    val itemHeight = 72.dp
-    val itemHeightPx = with(LocalDensity.current) { itemHeight.toPx() }
     val haptic = LocalHapticFeedback.current
 
-    var dragAccumulator by remember { mutableFloatStateOf(0f) }
+    val pagerState = rememberPagerState(
+        initialPage = currentIndex
+    ) {
+        options.size
+    }
+
+    var isFirstComposition by remember { mutableStateOf(true) }
+
+    LaunchedEffect(pagerState.currentPage) {
+        if (!isFirstComposition) {
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        }
+        isFirstComposition = false
+        onMinutesChange(options[pagerState.currentPage])
+    }
+
+    val animatedBorderColor by animateColorAsState(
+        targetValue = accentColor.copy(alpha = 0.25f),
+        animationSpec = tween(400),
+        label = "borderColor"
+    )
+    val animatedGlowColor by animateColorAsState(
+        targetValue = accentColor.copy(alpha = 0.04f),
+        animationSpec = tween(400),
+        label = "glowColor"
+    )
 
     Box(
-        modifier = modifier
-            .height(220.dp)
-            .pointerInput(Unit) {
-                detectVerticalDragGestures(
-                    onDragEnd   = { dragAccumulator = 0f },
-                    onDragCancel = { dragAccumulator = 0f }
-                ) { _, delta ->
-                    dragAccumulator -= delta          // swipe up = more time
-                    val steps = (dragAccumulator / itemHeightPx).roundToInt()
-                    if (steps != 0) {
-                        val newIndex = (currentIndex + steps).coerceIn(0, options.lastIndex)
-                        if (newIndex != currentIndex) {
-                            onMinutesChange(options[newIndex])
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            dragAccumulator = 0f
-                        }
-                    }
-                }
-            },
+        modifier = modifier.height(220.dp),
         contentAlignment = Alignment.Center
     ) {
-        // Visible window: one item above + current + one below (+ extras faded)
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            (-2..2).forEach { offset ->
-                val idx = currentIndex + offset
-                val value = options.getOrNull(idx)
-                val isCurrent = offset == 0
-                val targetAlpha = when (kotlin.math.abs(offset)) {
-                    0 -> 1f
-                    1 -> 0.45f
-                    else -> 0.12f
-                }
-                val targetScale = if (isCurrent) 1.25f else 0.85f
-                val targetRotationX = -25f * offset
+        // Glowing Glassmorphic Active Container (Center Track)
+        Box(
+            modifier = Modifier
+                .align(Alignment.Center)
+                .fillMaxWidth(0.85f)
+                .height(72.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(animatedGlowColor)
+                .border(
+                    width = 1.dp,
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(Color.Transparent, animatedBorderColor, Color.Transparent)
+                    ),
+                    shape = RoundedCornerShape(16.dp)
+                )
+        )
 
-                val animatedAlpha by animateFloatAsState(
-                    targetValue = if (value != null) targetAlpha else 0f,
-                    animationSpec = spring(stiffness = Spring.StiffnessLow),
-                    label = "alpha_$offset"
-                )
-                val animatedScale by animateFloatAsState(
-                    targetValue = targetScale,
-                    animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
-                    label = "scale_$offset"
-                )
-                val animatedRotationX by animateFloatAsState(
-                    targetValue = targetRotationX,
-                    animationSpec = spring(stiffness = Spring.StiffnessLow),
-                    label = "rot_$offset"
-                )
+        // Vertical Pager
+        VerticalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(vertical = 74.dp), // 74.dp padding top/bottom leaves exactly 72.dp in the middle
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) { page ->
+            val value = options[page]
+            
+            // Calculate absolute distance of this page from the viewport center
+            val pageOffset = (page - pagerState.currentPage) - pagerState.currentPageOffsetFraction
+            val absoluteOffset = kotlin.math.abs(pageOffset)
 
-                Box(
-                    modifier = Modifier
-                        .height(itemHeight)
-                        .graphicsLayer {
-                            alpha = animatedAlpha
-                            scaleX = animatedScale
-                            scaleY = animatedScale
-                            rotationX = animatedRotationX
-                            cameraDistance = 8 * density
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (value != null) {
-                        val label = if (value == 60) "1 hr" else "${value}m"
-                        Text(
-                            text  = label,
-                            fontSize = 32.sp,
-                            fontWeight = if (isCurrent) FontWeight.Black else FontWeight.Medium,
-                            color = if (isCurrent) accentColor else Color.White
-                        )
-                    }
-                }
+            // Dynamic scaling and opacity based on proximity to center
+            val scale = (1.25f - absoluteOffset * 0.4f).coerceIn(0.7f, 1.25f)
+            val alpha = (1.0f - absoluteOffset * 0.45f).coerceIn(0.12f, 1.0f)
+            val rotationX = -25f * pageOffset
+
+            Box(
+                modifier = Modifier
+                    .height(72.dp)
+                    .graphicsLayer {
+                        this.alpha = alpha
+                        this.scaleX = scale
+                        this.scaleY = scale
+                        this.rotationX = rotationX
+                        this.cameraDistance = 8 * density
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                val label = if (value == 60) "1 hr" else "${value}m"
+                val isCurrent = page == pagerState.currentPage
+                Text(
+                    text = label,
+                    fontSize = 32.sp,
+                    fontWeight = if (isCurrent) FontWeight.Black else FontWeight.Medium,
+                    color = if (isCurrent) accentColor else Color.White
+                )
             }
         }
 
-        // Selection highlight lines: Double thin high-tech glowing lines
-        Box(
-            modifier = Modifier
-                .align(Alignment.Center)
-                .fillMaxWidth(0.65f)
-                .height(1.5.dp)
-                .offset(y = (-36).dp)
-                .background(
-                    brush = Brush.horizontalGradient(
-                        colors = listOf(Color.Transparent, accentColor.copy(alpha = 0.8f), Color.Transparent)
-                    )
-                )
-        )
-        Box(
-            modifier = Modifier
-                .align(Alignment.Center)
-                .fillMaxWidth(0.65f)
-                .height(1.5.dp)
-                .offset(y = 36.dp)
-                .background(
-                    brush = Brush.horizontalGradient(
-                        colors = listOf(Color.Transparent, accentColor.copy(alpha = 0.8f), Color.Transparent)
-                    )
-                )
-        )
-
-        // Fade top + bottom edges
+        // Fade top + bottom edges for depth
         Box(
             modifier = Modifier
                 .fillMaxSize()
